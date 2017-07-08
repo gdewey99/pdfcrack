@@ -1,0 +1,293 @@
+Binary files pdfcrack-0.11/benchmark.o and pdfcrack-lfs/benchmark.o differ
+Binary files pdfcrack-0.11/common.o and pdfcrack-lfs/common.o differ
+diff -rupN pdfcrack-0.11/main.c pdfcrack-lfs/main.c
+--- pdfcrack-0.11/main.c	2008-06-08 12:37:12.000000000 -0400
++++ pdfcrack-lfs/main.c	2013-07-01 21:32:01.000000000 -0400
+@@ -32,7 +32,7 @@
+ #define CRASHFILE "savedstate.sav"
+ #define VERSION_MAJOR 0
+ #define VERSION_MINOR 11
+-
++#define _FILE_OFFSET_BITS  64  
+ /** alarmInterrupt is used to print out the progress at specific intervals */
+ static void
+ alarmInterrupt() {
+@@ -47,7 +47,7 @@ autoSave(int sig) {
+ 
+   if(sig)
+     fprintf(stderr,"Caught signal %d!\nTrying to save state...\n",sig);
+-  if((file = fopen(CRASHFILE, "w")) == 0) {
++  if((file = fopen64(CRASHFILE, "w")) == 0) {
+     fprintf(stderr,"Could not open %s for writing\n", CRASHFILE);
+   }
+   else{
+@@ -218,7 +218,7 @@ main(int argc, char** argv) {
+     goto out3;
+   }
+ 
+-  if((file = fopen(inputfile, "r")) == 0) {
++  if((file = fopen64(inputfile, "r")) == 0) {
+     fprintf(stderr,"Error: file %s not found\n", inputfile);
+     ret = 2;
+     goto out3;
+@@ -272,7 +272,7 @@ main(int argc, char** argv) {
+   }
+ 
+   if(wordlistfile) {
+-    if((wordlist = fopen(wordlistfile, "r")) == 0) {
++    if((wordlist = fopen64(wordlistfile, "r")) == 0) {
+       fprintf(stderr,"Error: file %s not found\n", wordlistfile);
+       ret = 6;
+       goto out2;
+Binary files pdfcrack-0.11/main.o and pdfcrack-lfs/main.o differ
+diff -rupN pdfcrack-0.11/Makefile pdfcrack-lfs/Makefile
+--- pdfcrack-0.11/Makefile	2008-04-30 17:14:58.000000000 -0400
++++ pdfcrack-lfs/Makefile	2013-07-01 21:19:17.000000000 -0400
+@@ -1,6 +1,7 @@
+-CFLAGS= -Wall -Wshadow -Wwrite-strings -Wsign-compare -Wfloat-equal \
++CFLAGS= -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -Wall -Wshadow -Wwrite-strings -Wsign-compare -Wfloat-equal \
+ 	-Wmissing-noreturn -Wbad-function-cast \
+ 	-Wmissing-prototypes -Winline -Wredundant-decls -O3
++	
+ 
+ all: pdfcrack
+ 
+Binary files pdfcrack-0.11/md5.o and pdfcrack-lfs/md5.o differ
+Binary files pdfcrack-0.11/passwords.o and pdfcrack-lfs/passwords.o differ
+Binary files pdfcrack-0.11/pdfcrack and pdfcrack-lfs/pdfcrack differ
+Binary files pdfcrack-0.11/pdfcrack.o and pdfcrack-lfs/pdfcrack.o differ
+Binary files pdfcrack-0.11/pdfparser.o and pdfcrack-lfs/pdfparser.o differ
+diff -rupN pdfcrack-0.11/pdfreader.c pdfcrack-lfs/pdfreader.c
+--- pdfcrack-0.11/pdfreader.c	2006-10-27 08:52:08.000000000 -0400
++++ pdfcrack-lfs/pdfreader.c	2013-07-01 21:33:27.000000000 -0400
+@@ -34,7 +34,7 @@ main(int argc, char **argv) {
+   }
+ 
+   FILE *file;
+-  if((file = fopen(argv[1], "r")) == 0) {
++  if((file = fopen64(argv[1], "r")) == 0) {
+     fprintf(stderr,"Error: file %s not found\n", argv[1]);
+     exit(2); 
+   }
+diff -rupN pdfcrack-0.11/rc4.c pdfcrack-lfs/rc4.c
+--- pdfcrack-0.11/rc4.c	2007-10-23 13:48:39.000000000 -0400
++++ pdfcrack-lfs/rc4.c	2013-07-01 20:29:23.000000000 -0400
+@@ -23,7 +23,7 @@
+ #define likely(x)       __builtin_expect((x),1)
+ #define unlikely(x)     __builtin_expect((x),0)
+ 
+-/** Seems to faster to do a memcpy of this on my machine than to create 
++/** Seems to be faster to do a memcpy of this on my machine than to create 
+     the array with a loop
+ */
+ static const uint8_t
+@@ -51,18 +51,20 @@ initial_state[256] = {
+   0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xfb,
+   0xfc, 0xfd, 0xfe, 0xff};
+ 
+-#define key_pass(n) {				\
+-    tmp = state[++i];				\
+-    j = (j + tmp + key[n]);			\
+-    state[i] = state[j];			\
+-    state[j] = tmp;				\
++#define key_pass(m, n) {			\
++    for (q=m; q<=n; q++) { 			\
++      tmp = state[++i];				\
++      j = (j + tmp + key[q]);			\
++      state[i] = state[j];			\
++      state[j] = tmp;				\
++    }						\
+   }
+ 
+ /** Do rc4-decrypt with key on bs of length 32 and compare it to match */
+ __attribute__ ((pure)) bool
+ rc4Match40b(const uint8_t *key, const uint8_t *bs,const uint8_t *match) {
+   uint8_t state[256];
+-  register unsigned int i;
++  register unsigned int i, q;
+   register uint8_t j, tmp;
+ 
+   /** initialize the state */
+@@ -74,11 +76,8 @@ rc4Match40b(const uint8_t *key, const ui
+   state[j] = 0;
+   i = 0;
+   do {
+-    key_pass(1);
+-    key_pass(2);
+-    key_pass(3);
+-    key_pass(4);
+-    key_pass(0);
++    key_pass(1,4);
++    key_pass(0,0);
+   } while(i < 255);
+ 
+   j = 0;
+@@ -111,7 +110,7 @@ static void
+ rc4Decrypt40b(const uint8_t *key, const uint8_t *bs,
+ 	      const unsigned int len, uint8_t *out) {
+   uint8_t state[256];
+-  register unsigned int i;
++  register unsigned int i, q;
+   register uint8_t j, tmp;
+ 
+   assert(len < 256);
+@@ -125,11 +124,8 @@ rc4Decrypt40b(const uint8_t *key, const
+   state[j] = 0;
+   i = 0;
+   do {
+-    key_pass(1);
+-    key_pass(2);
+-    key_pass(3);
+-    key_pass(4);
+-    key_pass(0);
++    key_pass(1,4);
++    key_pass(0,0);
+   } while(i < 255);
+ 
+   j = 0;
+@@ -151,7 +147,7 @@ static void
+ rc4Decrypt128b(const uint8_t *key, const uint8_t *bs,
+ 	       const unsigned int len, uint8_t *out) {
+   uint8_t state[256];
+-  register int i;
++  register int i, q;
+   register uint8_t j, tmp;
+ 
+   assert(len < 256);
+@@ -163,22 +159,7 @@ rc4Decrypt128b(const uint8_t *key, const
+   j = 0;
+   i = -1;
+   do {
+-    key_pass( 0);
+-    key_pass( 1);
+-    key_pass( 2);
+-    key_pass( 3);
+-    key_pass( 4);
+-    key_pass( 5);
+-    key_pass( 6);
+-    key_pass( 7);
+-    key_pass( 8);
+-    key_pass( 9);
+-    key_pass(10);
+-    key_pass(11);
+-    key_pass(12);
+-    key_pass(13);
+-    key_pass(14);
+-    key_pass(15);
++    key_pass(0,15);
+   } while(i < 255);
+ 
+   j = 0;
+Binary files pdfcrack-0.11/rc4.o and pdfcrack-lfs/rc4.o differ
+diff -rupN pdfcrack-0.11/rc4.patch pdfcrack-lfs/rc4.patch
+--- pdfcrack-0.11/rc4.patch	1969-12-31 19:00:00.000000000 -0500
++++ pdfcrack-lfs/rc4.patch	2013-07-01 20:25:32.000000000 -0400
+@@ -0,0 +1,108 @@
++--- rc4.c	2010-01-25 09:20:41.058082868 -0700
+++++ 0.10/rc4.c	2009-07-02 13:56:36.275814308 -0600
++@@ -23,7 +23,7 @@
++ #define likely(x)       __builtin_expect((x),1)
++ #define unlikely(x)     __builtin_expect((x),0)
++ 
++-/** Seems to faster to do a memcpy of this on my machine than to create 
+++/** Seems to be faster to do a memcpy of this on my machine than to create 
++     the array with a loop
++ */
++ static const uint8_t
++@@ -51,18 +51,20 @@
++   0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xfb,
++   0xfc, 0xfd, 0xfe, 0xff};
++ 
++-#define key_pass(n) {				\
++-    tmp = state[++i];				\
++-    j = (j + tmp + key[n]);			\
++-    state[i] = state[j];			\
++-    state[j] = tmp;				\
+++#define key_pass(m, n) {			\
+++    for (q=m; q<=n; q++) { 			\
+++      tmp = state[++i];				\
+++      j = (j + tmp + key[q]);			\
+++      state[i] = state[j];			\
+++      state[j] = tmp;				\
+++    }						\
++   }
++ 
++ /** Do rc4-decrypt with key on bs of length 32 and compare it to match */
++ __attribute__ ((pure)) bool
++ rc4Match40b(const uint8_t *key, const uint8_t *bs,const uint8_t *match) {
++   uint8_t state[256];
++-  register unsigned int i;
+++  register unsigned int i, q;
++   register uint8_t j, tmp;
++ 
++   /** initialize the state */
++@@ -74,11 +76,8 @@
++   state[j] = 0;
++   i = 0;
++   do {
++-    key_pass(1);
++-    key_pass(2);
++-    key_pass(3);
++-    key_pass(4);
++-    key_pass(0);
+++    key_pass(1,4);
+++    key_pass(0,0);
++   } while(i < 255);
++ 
++   j = 0;
++@@ -111,7 +110,7 @@
++ rc4Decrypt40b(const uint8_t *key, const uint8_t *bs,
++ 	      const unsigned int len, uint8_t *out) {
++   uint8_t state[256];
++-  register unsigned int i;
+++  register unsigned int i, q;
++   register uint8_t j, tmp;
++ 
++   assert(len < 256);
++@@ -125,11 +124,8 @@
++   state[j] = 0;
++   i = 0;
++   do {
++-    key_pass(1);
++-    key_pass(2);
++-    key_pass(3);
++-    key_pass(4);
++-    key_pass(0);
+++    key_pass(1,4);
+++    key_pass(0,0);
++   } while(i < 255);
++ 
++   j = 0;
++@@ -151,7 +147,7 @@
++ rc4Decrypt128b(const uint8_t *key, const uint8_t *bs,
++ 	       const unsigned int len, uint8_t *out) {
++   uint8_t state[256];
++-  register int i;
+++  register int i, q;
++   register uint8_t j, tmp;
++ 
++   assert(len < 256);
++@@ -163,22 +159,7 @@
++   j = 0;
++   i = -1;
++   do {
++-    key_pass( 0);
++-    key_pass( 1);
++-    key_pass( 2);
++-    key_pass( 3);
++-    key_pass( 4);
++-    key_pass( 5);
++-    key_pass( 6);
++-    key_pass( 7);
++-    key_pass( 8);
++-    key_pass( 9);
++-    key_pass(10);
++-    key_pass(11);
++-    key_pass(12);
++-    key_pass(13);
++-    key_pass(14);
++-    key_pass(15);
+++    key_pass(0,15);
++   } while(i < 255);
++ 
++   j = 0;
